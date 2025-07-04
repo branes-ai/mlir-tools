@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.23)
 project(mlir_tools_superbuild C CXX)
 
 include(ExternalProject)
@@ -17,7 +17,7 @@ if (CMAKE_GENERATOR_IDENTIFIER STREQUAL "MSVC")
     set(SUPERBUILD_CMAKE_GENERATOR_PLATFORM "x64")
     set(SUPERBUILD_CMAKE_TOOLSET_ARGS "-T host=x64") # For MSVC, specify host toolset
     message(STATUS "Configuring for MSVC Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
-elseif (CMAKE_GENERATOR_IDENTIFIERE STREQUAL "NINJA")
+elseif (CMAKE_GENERATOR_IDENTIFIER STREQUAL "NINJA")
     set(SUPERBUILD_CMAKE_GENERATOR "Ninja")
     set(SUPERBUILD_CMAKE_GENERATOR_PLATFORM "") # Ninja doesn't typically use -A/-T
     set(SUPERBUILD_CMAKE_TOOLSET_ARGS "") # No specific toolset args for Ninja
