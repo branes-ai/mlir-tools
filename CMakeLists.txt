@@ -3,7 +3,32 @@ project(mlir_tools_superbuild C CXX)
 
 include(ExternalProject)
 
-# === LLVM Configuration ===
+# ==============================================================================
+# Generator Selection Mechanism
+# ==============================================================================
+
+# Define a CMake option to select the desired generator.
+# Users will set this with -DGEN_TYPE=<value> on the CMake command line.
+set(CMAKE_GENERATOR_IDENTIFIER "MSVC" CACHE STRING "Select the CMake generator type (MSVC or NINJA)")
+
+# Determine the actual generator and platform arguments based on GEN_TYPE
+if (CMAKE_GENERATOR_IDENTIFIER STREQUAL "MSVC")
+    set(SUPERBUILD_CMAKE_GENERATOR "Visual Studio 17 2022")
+    set(SUPERBUILD_CMAKE_GENERATOR_PLATFORM "x64")
+    set(SUPERBUILD_CMAKE_TOOLSET_ARGS "-T host=x64") # For MSVC, specify host toolset
+    message(STATUS "Configuring for MSVC Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
+elseif (CMAKE_GENERATOR_IDENTIFIERE STREQUAL "NINJA")
+    set(SUPERBUILD_CMAKE_GENERATOR "Ninja")
+    set(SUPERBUILD_CMAKE_GENERATOR_PLATFORM "") # Ninja doesn't typically use -A/-T
+    set(SUPERBUILD_CMAKE_TOOLSET_ARGS "") # No specific toolset args for Ninja
+    message(STATUS "Configuring for Ninja Generator")
+else ()
+    message(FATAL_ERROR "Unsupported CMAKE_GENERATOR_IDENTIFIER: ${CMAKE_GENERATOR_IDENTIFIER}. Please choose MSVC or NINJA.")
+endif ()
+
+# ==============================================================================
+# LLVM Configuration
+# ==============================================================================
 set(LLVM_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/llvm-project/llvm)
 set(LLVM_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/llvm-build)
 set(LLVM_INSTALL_DIR ${CMAKE_BINARY_DIR}/ext/llvm-install)
@@ -16,16 +41,25 @@ ExternalProject_Add(llvm-project
     -DLLVM_ENABLE_PROJECTS=mlir
     -DLLVM_TARGETS_TO_BUILD=host
     -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_GENERATOR_PLATFORM=x64
+    # Use the selected generator variables
+    -G "${SUPERBUILD_CMAKE_GENERATOR}"
+    $<$<NOT:"${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}" STREQUAL "">: -A "${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}"> # -A for MSVC generator platform
+    ${SUPERBUILD_CMAKE_TOOLSET_ARGS} # -T for MSVC host toolset
     -DLLVM_ENABLE_ASSERTIONS=ON
-    -T host=x64
-#   -G "Visual Studio 17 2022"
   INSTALL_DIR ${LLVM_INSTALL_DIR}
-  INSTALL_COMMAND cmake --build . --target INSTALL --config Release
+  # For INSTALL_COMMAND, we need to consider the generator type for the --config argument
+  # Ninja builds are typically single-config, MSVC is multi-config
+  INSTALL_COMMAND
+    $<$<STREQUAL:"${SUPERBUILD_CMAKE_GENERATOR}", "Ninja">: cmake --build . --target INSTALL>
+    $<$<NOT:STREQUAL:"${SUPERBUILD_CMAKE_GENERATOR}", "Ninja">: cmake --build . --target INSTALL --config Release>
 )
 
-# === Torch-MLIR Configuration ===
-# === LLVM Configuration ===
+  # For INSTALL_COMMAND, we need to consider the generator type for the --config argument
+  # INSTALL_COMMAND cmake --build . --target INSTALL --config $<IF:"${SUPERBUILD_CMAKE_GENERATOR}" STREQUAL "Ninja", "", "Release">
+
+# ==============================================================================
+# Torch-MLIR Configuration
+# ==============================================================================
 set(TORCHMLIR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/torch-mlir)
 set(TORCHMLIR_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/torch-mlir-build)
 set(TORCHMLIR_INSTALL_DIR ${CMAKE_BINARY_DIR}/ext/torch-mlir-install)
@@ -41,7 +75,9 @@ ExternalProject_Add(torch-mlir
     -DLLVM_ENABLE_ASSERTIONS=ON
     -DLLVM_EXTERNAL_PROJECTS="torch-mlir"
     -DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR=${TORCHMLIR_SOURCE_DIR}
-#    -G "Visual Studio 17 2022"
-    -T host=x64
+    # Use the selected generator variables
+    -G "${SUPERBUILD_CMAKE_GENERATOR}"
+    $<$<NOT:"${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}" STREQUAL "">: -A "${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}">
+    ${SUPERBUILD_CMAKE_TOOLSET_ARGS}
   DEPENDS llvm-project
 )
