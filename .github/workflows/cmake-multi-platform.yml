@@ -46,7 +46,7 @@ jobs:
     # ============================================================================
     
     - name: Setup Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -97,7 +97,7 @@ jobs:
 
     - name: Cache LLVM build
       id: cache-llvm
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/ext/llvm-build
@@ -108,7 +108,7 @@ jobs:
           llvm-${{ matrix.cache-prefix }}-
 
     - name: Cache torch-mlir dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
@@ -189,7 +189,7 @@ jobs:
 
     - name: Upload build artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: mlir-tools-${{ matrix.cache-prefix }}-${{ github.sha }}
         path: artifacts/
@@ -197,7 +197,7 @@ jobs:
 
     - name: Upload build logs on failure
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-logs-${{ matrix.cache-prefix }}-${{ github.sha }}
         path: |
