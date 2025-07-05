@@ -107,7 +107,7 @@ jobs:
         python -m pip install "pybind11>=2.10" numpy
 
         # Verify pybind 11 installation
-      python -c "import pybind11; print(f'pybind11 version: {pybind11.__version__}'); print(f'CMake dir: {pybind11.get_cmake_dir()}')"
+        python -c "import pybind11; print(f'pybind11 version: {pybind11.__version__}'); print(f'CMake dir: {pybind11.get_cmake_dir()}')"
 
     - name: Setup MSVC environment
       if: runner.os == 'Windows'
