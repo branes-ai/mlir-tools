@@ -67,8 +67,7 @@ jobs:
           libffi-dev \
           software-properties-common \
           pybind11-dev \
-          python3-pybind11 \
-          nanobind
+          python3-pybind11 
         
         # Install Python development packages
         sudo add-apt-repository ppa:deadsnakes/ppa
@@ -89,7 +88,7 @@ jobs:
         
         # Install Python packages
         python3.10 -m pip install --user --upgrade pip setuptools wheel
-        python3.10 -m pip install --user "pybind11>=2.10" numpy
+        python3.10 -m pip install --user "pybind11>=2.10" "nanobind>=2.4" numpy
         
         # Verify pybind11 installation
         python3.10 -c "import pybind11; print(f'pybind11 version: {pybind11.__version__}'); print(f'CMake dir: {pybind11.get_cmake_dir()}')"
@@ -105,7 +104,7 @@ jobs:
       run: |
         # Install Python packages
         python -m pip install --upgrade pip setuptools wheel
-        python -m pip install "pybind11>=2.10" numpy
+        python -m pip install "pybind11>=2.10" "nanobind>=2.4" numpy
 
         # Verify pybind 11 installation
         python -c "import pybind11; print(f'pybind11 version: {pybind11.__version__}'); print(f'CMake dir: {pybind11.get_cmake_dir()}')"
