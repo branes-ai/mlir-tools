@@ -67,7 +67,8 @@ jobs:
           libffi-dev \
           software-properties-common \
           pybind11-dev \
-          python3-pybind11
+          python3-pybind11 \
+          nanobind
         
         # Install Python development packages
         sudo add-apt-repository ppa:deadsnakes/ppa
