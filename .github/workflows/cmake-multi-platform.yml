@@ -100,7 +100,7 @@ jobs:
         # Visual Studio 2022 is already installed on windows-2022 runners
 
     - name: Setup Python dependencies (Windows)
-      if: runner.os == "Windows"
+      if: runner.os == 'Windows'
       run: |
         # Install Python packages
         python -m pip install --upgrade pip setuptools wheel
