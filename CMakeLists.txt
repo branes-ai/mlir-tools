@@ -41,9 +41,17 @@ set(LLVM_CMAKE_ARGS
     -DLLVM_ENABLE_PROJECTS=mlir
     -DMLIR_ENABLE_BINDINGS_PYTHON=ON
     -DLLVM_TARGETS_TO_BUILD=host
+    -DLLVM_ENABLE_ASSERTIONS=ON
+    # Add these critical flags for torch-mlir compatibility:
+    -DLLVM_INSTALL_UTILS=ON
+    -DLLVM_BUILD_UTILS=ON
+    -DLLVM_INCLUDE_UTILS=ON
+    -DLLVM_BUILD_TOOLS=ON
+    -DLLVM_INCLUDE_TOOLS=ON
+    # For CI builds use the less voluminous Release build
     -DCMAKE_BUILD_TYPE=Release
     -G "${SUPERBUILD_CMAKE_GENERATOR}"
-    -DLLVM_ENABLE_ASSERTIONS=ON
+
 )
 
 # Add platform-specific arguments only if they're not empty
