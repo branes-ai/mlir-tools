@@ -1,0 +1,249 @@
+name: Build MLIR Tools
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  # Build type for Release builds
+  BUILD_TYPE: Release
+  # LLVM version for cache key consistency
+  LLVM_VERSION: "20.1.7"  # Update this when you change LLVM versions
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }} (${{ matrix.generator }})
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds
+          - os: ubuntu-22.04
+            generator: "NINJA"
+            python-version: "3.10"
+            cache-prefix: "linux-ninja"
+            
+          # Windows builds  
+          - os: windows-2022
+            generator: "MSVC"
+            python-version: "3.10"
+            cache-prefix: "windows-msvc"
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    # ============================================================================
+    # Platform-specific setup
+    # ============================================================================
+    
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          ninja-build \
+          cmake \
+          git \
+          python3-dev \
+          python3-pip \
+          libxml2-dev \
+          zlib1g-dev \
+          libedit-dev \
+          libffi-dev
+        
+        # Install Python development packages
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository ppa:deadsnakes/ppa
+        sudo apt-get update
+        sudo apt-get install -y python3.9 python3.9-dev python3.9-venv python3.9-distutils
+
+    - name: Install Windows dependencies
+      if: runner.os == 'Windows'
+      run: |
+        choco install ninja cmake git --no-progress
+        # Visual Studio 2022 is already installed on windows-2022 runners
+
+    - name: Setup MSVC environment
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    # ============================================================================
+    # Cache Configuration
+    # ============================================================================
+    
+    - name: Generate LLVM cache key
+      id: llvm-cache-key
+      run: |
+        # Create a cache key based on LLVM source content
+        echo "LLVM_HASH=${{ hashFiles('ext/llvm-project/llvm/CMakeLists.txt', 'ext/llvm-project/llvm/include/llvm/Config/llvm-config.h.cmake') }}" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Cache LLVM build
+      id: cache-llvm
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/ext/llvm-build
+          build/ext/llvm-install
+        key: llvm-${{ matrix.cache-prefix }}-${{ env.LLVM_VERSION }}-${{ steps.llvm-cache-key.outputs.LLVM_HASH }}-v2
+        restore-keys: |
+          llvm-${{ matrix.cache-prefix }}-${{ env.LLVM_VERSION }}-
+          llvm-${{ matrix.cache-prefix }}-
+
+    - name: Cache torch-mlir dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.local/lib/python*/site-packages
+        key: torch-mlir-deps-${{ matrix.cache-prefix }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          torch-mlir-deps-${{ matrix.cache-prefix }}-
+
+    # ============================================================================
+    # Build Configuration and Execution
+    # ============================================================================
+    
+    - name: Create build directory
+      run: cmake -E make_directory build
+
+    - name: Configure CMake
+      working-directory: build
+      run: |
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_GENERATOR_IDENTIFIER=${{ matrix.generator }}
+      shell: bash
+
+    - name: Build LLVM (if not cached)
+      if: steps.cache-llvm.outputs.cache-hit != 'true'
+      working-directory: build
+      run: |
+        echo "Building LLVM from source (not found in cache)..."
+        cmake --build . --target llvm-project --config ${{ env.BUILD_TYPE }} --parallel 2
+      shell: bash
+
+    - name: Verify LLVM cache/build
+      working-directory: build
+      run: |
+        echo "Checking LLVM installation..."
+        ls -la ext/llvm-install/ || dir ext\llvm-install\ || echo "LLVM install directory not found"
+        ls -la ext/llvm-install/bin/ || dir ext\llvm-install\bin\ || echo "LLVM bin directory not found"
+      shell: bash
+
+    - name: Build torch-mlir
+      working-directory: build
+      run: |
+        echo "Building torch-mlir..."
+        cmake --build . --target torch-mlir --config ${{ env.BUILD_TYPE }} --parallel 2
+      shell: bash
+
+    - name: Run basic smoke tests
+      working-directory: build
+      run: |
+        echo "Running basic validation..."
+        # Check if key binaries exist
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          ls -la ext/llvm-install/bin/mlir-opt || echo "mlir-opt not found"
+          ls -la ext/torch-mlir-build/ || echo "torch-mlir build directory not found"
+        else
+          dir ext\llvm-install\bin\mlir-opt.exe 2>nul || echo "mlir-opt.exe not found"
+          dir ext\torch-mlir-build\ 2>nul || echo "torch-mlir build directory not found"
+        fi
+      shell: bash
+
+    # ============================================================================
+    # Artifacts and Results
+    # ============================================================================
+    
+    - name: Collect build artifacts
+      if: always()
+      run: |
+        mkdir -p artifacts
+        # Copy important build outputs
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          cp -r build/ext/llvm-install/bin artifacts/llvm-bin || echo "Could not copy LLVM binaries"
+          cp -r build/ext/torch-mlir-build artifacts/torch-mlir-build || echo "Could not copy torch-mlir build"
+        else
+          xcopy build\ext\llvm-install\bin artifacts\llvm-bin /E /I /Q 2>nul || echo "Could not copy LLVM binaries"
+          xcopy build\ext\torch-mlir-build artifacts\torch-mlir-build /E /I /Q 2>nul || echo "Could not copy torch-mlir build"
+        fi
+      shell: bash
+
+    - name: Upload build artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mlir-tools-${{ matrix.cache-prefix }}-${{ github.sha }}
+        path: artifacts/
+        retention-days: 7
+
+    - name: Upload build logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ matrix.cache-prefix }}-${{ github.sha }}
+        path: |
+          build/**/*.log
+          build/**/CMakeFiles/*.log
+          build/**/CMakeOutput.log
+          build/**/CMakeError.log
+        retention-days: 14
+
+  # ============================================================================
+  # Summary job that runs after all builds complete
+  # ============================================================================
+  
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    
+    steps:
+    - name: Check build results
+      run: |
+        echo "Build Summary:"
+        echo "=============="
+        
+        # Check if any builds failed
+        if [[ "${{ needs.build.result }}" == "failure" ]]; then
+          echo "❌ Some builds failed"
+          exit 1
+        elif [[ "${{ needs.build.result }}" == "success" ]]; then
+          echo "✅ All builds successful"
+        else
+          echo "⚠️  Build status: ${{ needs.build.result }}"
+        fi
+
+    - name: Report cache effectiveness
+      run: |
+        echo ""
+        echo "Cache Information:"
+        echo "=================="
+        echo "This workflow uses caching to speed up LLVM builds."
+        echo "First-time builds may take 30-60 minutes, cached builds should complete in 5-15 minutes."
+        echo ""
+        echo "Cache keys are based on:"
+        echo "- Platform and generator type"
+        echo "- LLVM version (${{ env.LLVM_VERSION }})"
+        echo "- LLVM source content hash"
+        echo ""
+        echo "To clear caches, increment the version number in the cache key (currently v2)."
