@@ -64,19 +64,50 @@ jobs:
           libxml2-dev \
           zlib1g-dev \
           libedit-dev \
-          libffi-dev
+          libffi-dev \
+          software-properties-common \
+          pybind11-dev \
+          python3-pybind11
         
         # Install Python development packages
-        sudo apt-get install -y software-properties-common
         sudo add-apt-repository ppa:deadsnakes/ppa
         sudo apt-get update
-        sudo apt-get install -y python3.9 python3.9-dev python3.9-venv python3.9-distutils
+        #sudo apt-get install -y python3.9 python3.9-dev python3.9-venv python3.9-distutils
+        sudo apt-get install -y python3.10 python3.10-dev python3.10-venv python3.10-distutils
+
+    - name: Setup Python dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        # Install pip for Python 3.10
+        wget -q https://bootstrap.pypa.io/get-pip.py
+        python3.10 get-pip.py --user
+        rm get-pip.py
+        
+        # Add ~/.local/bin to PATH for this session
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        
+        # Install Python packages
+        python3.10 -m pip install --user --upgrade pip setuptools wheel
+        python3.10 -m pip install --user "pybind11>=2.10" numpy
+        
+        # Verify pybind11 installation
+        python3.10 -c "import pybind11; print(f'pybind11 version: {pybind11.__version__}'); print(f'CMake dir: {pybind11.get_cmake_dir()}')"
 
     - name: Install Windows dependencies
       if: runner.os == 'Windows'
       run: |
         choco install ninja cmake git --no-progress
         # Visual Studio 2022 is already installed on windows-2022 runners
+
+    - name: Setup Python dependencies (Windows)
+      if: runner.os == "Windows"
+      run: |
+        # Install Python packages
+        python -m pip install --upgrade pip setuptools wheel
+        python -m pip install "pybind11>=2.10" numpy
+
+        # Verify pybind 11 installation
+      python -c "import pybind11; print(f'pybind11 version: {pybind11.__version__}'); print(f'CMake dir: {pybind11.get_cmake_dir()}')"
 
     - name: Setup MSVC environment
       if: runner.os == 'Windows'
@@ -163,9 +194,13 @@ jobs:
         if [ "$RUNNER_OS" == "Linux" ]; then
           ls -la ext/llvm-install/bin/mlir-opt || echo "mlir-opt not found"
           ls -la ext/torch-mlir-build/ || echo "torch-mlir build directory not found"
+          # Test pybind11 integration
+          python3.10 -c "import sys; sys.path.insert(0, 'ext/torch-mlir-build/tools/torch-mlir/python_packages/torch_mlir'); import torch_mlir" || echo "torch-mlir Python module not importable yet"
         else
           dir ext\llvm-install\bin\mlir-opt.exe 2>nul || echo "mlir-opt.exe not found"
           dir ext\torch-mlir-build\ 2>nul || echo "torch-mlir build directory not found"
+          # Test pybind11 integration on Windows
+          python -c "import sys; sys.path.insert(0, 'ext/torch-mlir-build/tools/torch-mlir/python_packages/torch_mlir'); import torch_mlir" || echo "torch-mlir Python module not importable yet"
         fi
       shell: bash
 
