@@ -48,10 +48,12 @@ set(LLVM_CMAKE_ARGS
     -DLLVM_INCLUDE_UTILS=ON
     -DLLVM_BUILD_TOOLS=ON
     -DLLVM_INCLUDE_TOOLS=ON
+    # Use Clang for consistency
+    -DCMAKE_C_COMPILER=clang
+    -DCMAKE_CXX_COMPILER=clang++
     # For CI builds use the less voluminous Release build
     -DCMAKE_BUILD_TYPE=Release
     -G "${SUPERBUILD_CMAKE_GENERATOR}"
-
 )
 
 # Add platform-specific arguments only if they're not empty
