@@ -63,6 +63,33 @@ else
     echo "⚠️  pybind11 CMake config not found, but this might still work"
 fi
 
+# Verify nanobind
+echo "nanobind verification:"
+python3.10 -c "
+try:
+    import nanobind as nb
+    print(f'nanobind version: {nb.__version__}')
+	    
+    # Get nanobind CMake directory
+    cmake_dir = nb.cmake_dir()
+    print(f'nanobind CMake dir: {cmake_dir}')
+
+    # Test basic functionality
+    print('Testing nanobind basic functionality...')
+
+    # test that we can import the actual core components
+    from nanobind import module_, class_, enum_
+    print('✅ nanobind core components imported successfully')
+
+except ImportError as e:
+    print(f'❌ nanobind import failed: {e}')
+    print('Install with: pip3 install --user nanobind')
+except Exception as e:
+    print(f'⚠️  nanobind imported but functionality test failed: {e}')
+"
+echo ""
+
+
 echo ""
 echo "🎉 Dependency setup complete!"
 echo "You can now run your CMake build:"
