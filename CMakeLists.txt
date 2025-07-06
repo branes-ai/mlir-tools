@@ -1,4 +1,13 @@
 cmake_minimum_required(VERSION 3.23)
+
+# Set compilers to Clang before project() call (can be overridden by environment)
+if(NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER clang)
+endif()
+if(NOT CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER clang++)
+endif()
+
 project(mlir_tools_superbuild C CXX)
 
 include(ExternalProject)
@@ -48,10 +57,12 @@ set(LLVM_CMAKE_ARGS
     -DLLVM_INCLUDE_UTILS=ON
     -DLLVM_BUILD_TOOLS=ON
     -DLLVM_INCLUDE_TOOLS=ON
+    # Use Clang for consistency
+    -DCMAKE_C_COMPILER=clang
+    -DCMAKE_CXX_COMPILER=clang++
     # For CI builds use the less voluminous Release build
     -DCMAKE_BUILD_TYPE=Release
     -G "${SUPERBUILD_CMAKE_GENERATOR}"
-
 )
 
 # Add platform-specific arguments only if they're not empty
@@ -96,6 +107,9 @@ set(TORCHMLIR_CMAKE_ARGS
     -DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR=${TORCHMLIR_SOURCE_DIR}
     -DPython3_EXECUTABLE=/usr/bin/python3.10
     -DPython3_INCLUDE_DIR=/usr/include/python3.10
+    # Use Clang for consistency
+    -DCMAKE_C_COMPILER=clang
+    -DCMAKE_CXX_COMPILER=clang++
     -G "${SUPERBUILD_CMAKE_GENERATOR}"
 )
 

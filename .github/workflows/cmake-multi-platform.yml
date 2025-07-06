@@ -66,14 +66,31 @@ jobs:
           libedit-dev \
           libffi-dev \
           software-properties-common \
-          pybind11-dev \
-          python3-pybind11 
+          clang-14 \
+          clang++-14 \
+          libc++-14-dev \
+          libc++abi-14-dev \
+          lld-14
         
         # Install Python development packages
         sudo add-apt-repository ppa:deadsnakes/ppa
         sudo apt-get update
         #sudo apt-get install -y python3.9 python3.9-dev python3.9-venv python3.9-distutils
         sudo apt-get install -y python3.10 python3.10-dev python3.10-venv python3.10-distutils
+        sudo apt-get install -y pybind11-dev python3-pip python3-pybind11 
+
+    - name: Set up Clang as default compiler
+      run: |
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
+        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100
+        sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-14 100
+        sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-14 100
+
+        # Verify the installation
+        echo "Clang version:"
+        clang --version
+        echo "Clang++ version:"
+        clang++ --version
 
     - name: Setup Python dependencies (Linux)
       if: runner.os == 'Linux'
