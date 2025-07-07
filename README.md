@@ -36,3 +36,16 @@ git pull --recurse-submodules
 if you want to pull your submodules to latest commits instead of the current commit the repo points to.
 
 See git-submodule(1) for details
+
+## Reset git submodules by deiniting and initing
+
+We can deinitalizing the submodules and reinitializing the submodules again. This will remove all submodules and reclone them again. So it will take more time than method 1. But this can fix many problems which leads to failures of simplying git reset. The commands are as follows.
+
+```bash
+# unbinds all submodules
+git submodule deinit -f .
+# checkout again
+git submodule update --init --recursive
+```
+
+The --recursive option make git recursively do update --init under submodules in case these submodules also have submodules.
