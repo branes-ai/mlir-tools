@@ -87,6 +87,9 @@ ExternalProject_Add(llvm-project
     CMAKE_ARGS ${LLVM_CMAKE_ARGS}
     INSTALL_DIR ${LLVM_INSTALL_DIR}
     INSTALL_COMMAND ${LLVM_INSTALL_COMMAND}
+    # Use a specific LLVM commit that's compatible with torch-mlir
+    GIT_REPOSITORY https://github.com/llvm/llvm-project.git
+    GIT_TAG 9a196c88fc76b91cdb4b8ceef6ae5e1ae3a2c45e  # Known good commit from late January 2025
 )
 
 # ==============================================================================

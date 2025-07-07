@@ -6,9 +6,9 @@ The key errors show:
 
 
 
-1\. \*\*Deprecated ArrayRef constructor warnings\*\* - LLVM has updated its ArrayRef API
+1. **Deprecated ArrayRef constructor warnings** - LLVM has updated its ArrayRef API
 
-2\. \*\*ConstantIntOp build method signature mismatches\*\* - The MLIR Arith dialect API has changed
+2. **ConstantIntOp build method signature mismatches** - The MLIR Arith dialect API has changed
 
 
 
@@ -20,7 +20,7 @@ Let me search for more specific version compatibility information:
 
 
 
-Based on the search results and the error patterns you're seeing, this is indeed a \*\*version compatibility issue\*\*. The documentation mentions that torch-mlir depends on llvm-project and stablehlo, and they aim to update these at least weekly to bring in the latest features and spread out over time the effort of updating code for MLIR API breakages.
+Based on the search results and the error patterns you're seeing, this is indeed a **version compatibility issue**. The documentation mentions that torch-mlir depends on llvm-project and stablehlo, and they aim to update these at least weekly to bring in the latest features and spread out over time the effort of updating code for MLIR API breakages.
 
 
 
@@ -28,7 +28,7 @@ Here are the solutions to fix this:
 
 
 
-\## Solution 1: Use Compatible LLVM Version (Recommended)
+## Solution 1: Use Compatible LLVM Version (Recommended)
 
 
 
@@ -39,23 +39,14 @@ The issue is that you're building with the latest LLVM `main` branch, but torch-
 ```cmake
 
 ExternalProject\_Add(llvm-project
-
-&nbsp;   SOURCE\_DIR ${LLVM\_SOURCE\_DIR}
-
-&nbsp;   BINARY\_DIR ${LLVM\_BINARY\_DIR}
-
-&nbsp;   CMAKE\_ARGS ${LLVM\_CMAKE\_ARGS}
-
-&nbsp;   INSTALL\_DIR ${LLVM\_INSTALL\_DIR}
-
-&nbsp;   INSTALL\_COMMAND ${LLVM\_INSTALL\_COMMAND}
-
-&nbsp;   # Use a specific LLVM commit that's compatible with torch-mlir
-
-&nbsp;   GIT\_REPOSITORY https://github.com/llvm/llvm-project.git
-
-&nbsp;   GIT\_TAG 9a196c88fc76b91cdb4b8ceef6ae5e1ae3a2c45e  # Known good commit from late January 2025
-
+    SOURCE_DIR ${LLVM_SOURCE_DIR}
+    BINARY_DIR ${LLVM_BINARY_DIR}
+    CMAKE_ARGS ${LLVM_CMAKE_ARGS}
+    INSTALL_DIR ${LLVM_INSTALL_DIR}
+    INSTALL_COMMAND ${LLVM_INSTALL_COMMAND}
+    # Use a specific LLVM commit that's compatible with torch-mlir
+    GIT_REPOSITORY https://github.com/llvm/llvm-project.git
+    GIT_TAG 9a196c88fc76b91cdb4b8ceef6ae5e1ae3a2c45e  # Known good commit from late January 2025
 )
 
 ```
@@ -70,7 +61,7 @@ https://github.com/llvm/torch-mlir/blob/main/docs/development.md
 
 
 
-\## Solution 2: Use Pre-built Wheels (Alternative)
+## Solution 2: Use Pre-built Wheels (Alternative)
 
 
 
@@ -80,60 +71,45 @@ If building from source continues to be problematic, you can use the pre-built w
 
 ```bash
 
-\# Install pre-built torch-mlir instead of building from source
+# Install pre-built torch-mlir instead of building from source
 
-pip install --pre torch-mlir torchvision \\
-
-&nbsp;   --extra-index-url https://download.pytorch.org/whl/nightly/cpu \\
-
-&nbsp;   -f https://github.com/llvm/torch-mlir-release/releases/expanded\_assets/dev-wheels
+pip install --pre torch-mlir torchvision \
+    --extra-index-url https://download.pytorch.org/whl/nightly/cpu \
+    -f https://github.com/llvm/torch-mlir-release/releases/expanded_assets/dev-wheels
 
 ```
 
-
-
-\## Solution 3: Fix Current Build (Quick Fix)
-
+## Solution 3: Fix Current Build (Quick Fix)
 
 
 If you want to keep your current LLVM version, you can try adding compatibility flags:## To proceed:
 
+**I recommend Solution 1** - using a compatible LLVM commit. The updated CMakeLists.txt now:
 
 
-\*\*I recommend Solution 1\*\* - using a compatible LLVM commit. The updated CMakeLists.txt now:
+1. **Uses a specific LLVM commit** that should be compatible with torch-mlir
+2. **Downloads LLVM directly** from the official repository 
+3. **Adds compatibility flags** to handle deprecation warnings
 
 
-
-1\. \*\*Uses a specific LLVM commit\*\* that should be compatible with torch-mlir
-
-2\. \*\*Downloads LLVM directly\*\* from the official repository 
-
-3\. \*\*Adds compatibility flags\*\* to handle deprecation warnings
-
-
-
-\*\*To test this:\*\*
-
-
+**To test this:**
 
 ```bash
 
-\# Clean your build completely
+# Clean your build completely
 
 rm -rf build/ ext/
 
 
+# Rebuild with the fixed configuration
 
-\# Rebuild with the fixed configuration
+mkdir build && cd build
 
-mkdir build \&\& cd build
-
-cmake .. -DCMAKE\_GENERATOR\_IDENTIFIER=NINJA
+cmake .. -DCMAKE_GENERATOR_IDENTIFIER=NINJA
 
 make -j$(nproc)
 
 ```
-
 
 
 The key insight from the torch-mlir documentation is that they update LLVM weekly and need to fix API breakages, which means there are often incompatibilities between the latest LLVM main branch and torch-mlir. Using a known-good commit should resolve the `ConstantIntOp` build signature mismatches and ArrayRef deprecation issues you're seeing.
