@@ -11,7 +11,7 @@ endif()
 
 # When using the CMake GUI, we need to point to the venv python required
 # The python dependencies, pybind11, nanobind, and numpy need to be installed in this venv
-# for the build to work. 
+# for the build to work.
 # With Linux this is all dynamically picked up the shell environment.
 set(PYTHON_EXECUTABLE "D:/Python/venv/p310/Scripts/python.exe" CACHE FILEPATH "Python executable")
 
@@ -20,7 +20,7 @@ set(PYTHON_EXECUTABLE "D:/Python/venv/p310/Scripts/python.exe" CACHE FILEPATH "P
 # ==============================================================================
 #
 # Usage on Windows
-# 
+#
 # first activate your virtual environment
 # source /path/to/venv/bin/activate    # Linux/Mac
 # or
@@ -29,9 +29,9 @@ set(PYTHON_EXECUTABLE "D:/Python/venv/p310/Scripts/python.exe" CACHE FILEPATH "P
 # Then run cmake (it will automatically find the activated Python)
 # cmake -DCMAKE_GENERATOR_IDENTIFIER=MSVC ..
 #
-# When using CMake GUI 
+# When using CMake GUI
 # 1. open a shell
-# 2. activate the venv 
+# 2. activate the venv
 #     C:\path\to\venv\Scripts\activate.bat
 # 3. Launch CMake GUI from the activated environment
 #     cmake-gui
@@ -55,13 +55,13 @@ else()
         else()
             set(VENV_PYTHON "$ENV{VIRTUAL_ENV}/bin/python")
         endif()
-        
+
         if(EXISTS ${VENV_PYTHON})
             set(PYTHON_EXECUTABLE ${VENV_PYTHON})
             message(STATUS "Using virtual environment Python: ${PYTHON_EXECUTABLE}")
         endif()
     endif()
-    
+
     # Option 3: Fallback to specific Python
     if(NOT PYTHON_EXECUTABLE)
         set(PYTHON_EXECUTABLE /usr/bin/python3.10)
@@ -143,99 +143,98 @@ else ()
 endif ()
 
 # ==============================================================================
-# LLVM Configuration
-# ==============================================================================
-set(LLVM_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/llvm-project/llvm)
-set(LLVM_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/llvm-build)
-set(LLVM_INSTALL_DIR ${CMAKE_BINARY_DIR}/ext/llvm-install)
-
-# Build the CMAKE_ARGS list conditionally
-set(LLVM_CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
-    -DLLVM_ENABLE_PROJECTS=mlir
-    -DPython3_EXECUTABLE=${PYTHON_EXECUTABLE}
-    -DMLIR_ENABLE_BINDINGS_PYTHON=ON
-    -DLLVM_TARGETS_TO_BUILD=host
-    -DLLVM_ENABLE_ASSERTIONS=ON
-    # Add these critical flags for torch-mlir compatibility:
-    -DLLVM_INSTALL_UTILS=ON
-    -DLLVM_BUILD_UTILS=ON
-    -DLLVM_INCLUDE_UTILS=ON
-    -DLLVM_BUILD_TOOLS=ON
-    -DLLVM_INCLUDE_TOOLS=ON
-    # Use Clang for consistency
-    -DCMAKE_C_COMPILER=clang
-    -DCMAKE_CXX_COMPILER=clang++
-    # For CI builds use the less voluminous Release build
-    -DCMAKE_BUILD_TYPE=Release
-    -G "${SUPERBUILD_CMAKE_GENERATOR}"
-)
-
-# Add platform-specific arguments only if they're not empty
-if(SUPERBUILD_PLATFORM_ARGS)
-    list(APPEND LLVM_CMAKE_ARGS ${SUPERBUILD_PLATFORM_ARGS})
-endif()
-
-if(SUPERBUILD_CMAKE_TOOLSET_ARGS)
-    list(APPEND LLVM_CMAKE_ARGS ${SUPERBUILD_CMAKE_TOOLSET_ARGS})
-endif()
-
-# Determine install command based on generator
-if(CMAKE_GENERATOR_IDENTIFIER STREQUAL "NINJA")
-    set(LLVM_INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install)
-else()
-    set(LLVM_INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install --config Release)
-endif()
-
-ExternalProject_Add(llvm-project
-    SOURCE_DIR ${LLVM_SOURCE_DIR}
-    BINARY_DIR ${LLVM_BINARY_DIR}
-    CMAKE_ARGS ${LLVM_CMAKE_ARGS}
-    INSTALL_DIR ${LLVM_INSTALL_DIR}
-    INSTALL_COMMAND ${LLVM_INSTALL_COMMAND}
-    # Use a specific LLVM commit that's compatible with torch-mlir
-    #GIT_REPOSITORY https://github.com/llvm/llvm-project.git
-    #GIT_TAG 5fcf907b34355980f77d7665a175b05fea7a6b7b  # Known good commit from late January 2024
-)
-
-# ==============================================================================
 # Torch-MLIR Configuration
 # ==============================================================================
 set(TORCHMLIR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/torch-mlir)
 set(TORCHMLIR_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/torch-mlir-build)
 set(TORCHMLIR_INSTALL_DIR ${CMAKE_BINARY_DIR}/ext/torch-mlir-install)
 
-# Build the CMAKE_ARGS list conditionally for torch-mlir
+# Convert paths to use forward slashes for CMake
+file(TO_CMAKE_PATH "${TORCHMLIR_INSTALL_DIR}" TORCHMLIR_INSTALL_DIR_CMAKE)
+file(TO_CMAKE_PATH "${PYTHON_EXECUTABLE}" PYTHON_EXECUTABLE_CMAKE)
+file(TO_CMAKE_PATH "${PYTHON_INCLUDE_DIR}" PYTHON_INCLUDE_DIR_CMAKE)
+
+# Build the CMAKE_ARGS list for torch-mlir
 set(TORCHMLIR_CMAKE_ARGS
-    -DCMAKE_PREFIX_PATH=${TORCHMLIR_INSTALL_DIR}
-    -DMLIR_DIR=${LLVM_INSTALL_DIR}/lib/cmake/mlir
-    -DLLVM_DIR=${LLVM_INSTALL_DIR}/lib/cmake/llvm
-    -DCMAKE_BUILD_TYPE=Release
-    -DLLVM_ENABLE_ASSERTIONS=ON
-    -DLLVM_EXTERNAL_PROJECTS="torch-mlir"
-    -DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR=${TORCHMLIR_SOURCE_DIR}
-    -DPython3_EXECUTABLE=${PYTHON_EXECUTABLE}
-    -DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR}
-    #-DPython3_EXECUTABLE=/usr/bin/python3.10
-    #-DPython3_INCLUDE_DIR=/usr/include/python3.10
-    # Use Clang for consistency
-    -DCMAKE_C_COMPILER=clang
-    -DCMAKE_CXX_COMPILER=clang++
-    -G "${SUPERBUILD_CMAKE_GENERATOR}"
+    "-DCMAKE_INSTALL_PREFIX=${TORCHMLIR_INSTALL_DIR_CMAKE}"
+    "-DCMAKE_BUILD_TYPE=Release"
+    "-DLLVM_ENABLE_ASSERTIONS=ON"
+    
+    # Python configuration
+    "-DPython3_EXECUTABLE=${PYTHON_EXECUTABLE_CMAKE}"
+    "-DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR_CMAKE}"
+    
+    # Compiler configuration
+    "-DCMAKE_C_COMPILER=clang"
+    "-DCMAKE_CXX_COMPILER=clang++"
+    
+    # Torch-MLIR specific options
+    "-DTORCH_MLIR_ENABLE_BINDINGS_PYTHON=ON"
+    "-DTORCH_MLIR_OUT_OF_TREE_BUILD=OFF"
+    "-DTORCH_MLIR_USE_INSTALLED_PYTORCH=ON"
+    
+    # LLVM/MLIR options (using torch-mlir's internal LLVM)
+    "-DMLIR_ENABLE_BINDINGS_PYTHON=ON"
+    "-DLLVM_ENABLE_PROJECTS=mlir"
+    "-DLLVM_TARGETS_TO_BUILD=X86;NVPTX;AMDGPU"
+    "-DLLVM_ENABLE_TERMINFO=OFF"
+    "-DLLVM_ENABLE_LIBEDIT=OFF"
+    "-DLLVM_ENABLE_LIBXML2=OFF"
+    "-DLLVM_ENABLE_ZLIB=OFF"
+    "-DLLVM_ENABLE_ZSTD=OFF"
+    "-DLLVM_PARALLEL_COMPILE_JOBS=4"
+    "-DLLVM_PARALLEL_LINK_JOBS=2"
 )
 
-# Add platform-specific arguments only if they're not empty
-if(SUPERBUILD_PLATFORM_ARGS)
-    list(APPEND TORCHMLIR_CMAKE_ARGS ${SUPERBUILD_PLATFORM_ARGS})
-endif()
+# Don't add platform args to CMAKE_ARGS since we're using dedicated properties
+# Platform args will be handled by CMAKE_GENERATOR_PLATFORM and CMAKE_GENERATOR_TOOLSET
 
-if(SUPERBUILD_CMAKE_TOOLSET_ARGS)
-    list(APPEND TORCHMLIR_CMAKE_ARGS ${SUPERBUILD_CMAKE_TOOLSET_ARGS})
-endif()
-
+# Add Git submodule update step
 ExternalProject_Add(torch-mlir
     SOURCE_DIR ${TORCHMLIR_SOURCE_DIR}
     BINARY_DIR ${TORCHMLIR_BINARY_DIR}
+    
+    # Update submodules (including llvm-project and stablehlo)
+    UPDATE_COMMAND ""
+    PATCH_COMMAND ${CMAKE_COMMAND} -E chdir ${TORCHMLIR_SOURCE_DIR} 
+                  git submodule update --init --recursive
+    
+    CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
+    CMAKE_GENERATOR_PLATFORM ${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}
     CMAKE_ARGS ${TORCHMLIR_CMAKE_ARGS}
-    DEPENDS llvm-project
+    
+    # Build specific targets
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+    
+    # Install
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+    
+    # Log output for debugging
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
 )
+
+# ==============================================================================
+# Export Configuration
+# ==============================================================================
+
+# Create a simple config file for downstream projects
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/torch-mlir-config.cmake.in
+    ${CMAKE_BINARY_DIR}/torch-mlir-config.cmake
+    @ONLY
+)
+
+# Optional: Create an alias target for convenience
+add_custom_target(build-torch-mlir DEPENDS torch-mlir)
+
+# Print configuration summary
+message(STATUS "==== Torch-MLIR Configuration Summary ====")
+message(STATUS "Source directory: ${TORCHMLIR_SOURCE_DIR}")
+message(STATUS "Binary directory: ${TORCHMLIR_BINARY_DIR}")
+message(STATUS "Install directory: ${TORCHMLIR_INSTALL_DIR}")
+message(STATUS "Python executable: ${PYTHON_EXECUTABLE}")
+message(STATUS "Python version: ${PYTHON_VERSION}")
+message(STATUS "Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
+message(STATUS "===========================================")

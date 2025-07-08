@@ -1,0 +1,41 @@
+# torch-mlir-config.cmake.in
+# Configuration file for torch-mlir
+
+set(TORCH_MLIR_INSTALL_DIR "@TORCHMLIR_INSTALL_DIR@")
+set(TORCH_MLIR_BINARY_DIR "@TORCHMLIR_BINARY_DIR@")
+set(TORCH_MLIR_SOURCE_DIR "@TORCHMLIR_SOURCE_DIR@")
+
+# Find torch-mlir components
+find_path(TORCH_MLIR_INCLUDE_DIR
+    NAMES torch-mlir/Dialect/Torch/IR/TorchOps.h
+    PATHS ${TORCH_MLIR_INSTALL_DIR}/include
+    NO_DEFAULT_PATH
+)
+
+find_library(TORCH_MLIR_LIBRARY
+    NAMES TorchMLIRTorchDialect
+    PATHS ${TORCH_MLIR_INSTALL_DIR}/lib
+    NO_DEFAULT_PATH
+)
+
+# Also expose MLIR/LLVM from the torch-mlir build
+set(MLIR_DIR ${TORCH_MLIR_INSTALL_DIR}/lib/cmake/mlir)
+set(LLVM_DIR ${TORCH_MLIR_INSTALL_DIR}/lib/cmake/llvm)
+
+# Find MLIR and LLVM
+find_package(MLIR REQUIRED CONFIG PATHS ${MLIR_DIR} NO_DEFAULT_PATH)
+find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
+
+# Create imported targets
+if(TORCH_MLIR_LIBRARY AND TORCH_MLIR_INCLUDE_DIR)
+    add_library(torch-mlir::torch-mlir UNKNOWN IMPORTED)
+    set_target_properties(torch-mlir::torch-mlir PROPERTIES
+        IMPORTED_LOCATION ${TORCH_MLIR_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES ${TORCH_MLIR_INCLUDE_DIR}
+    )
+endif()
+
+# Set variables for client projects
+set(TORCH_MLIR_FOUND TRUE)
+set(TORCH_MLIR_INCLUDE_DIRS ${TORCH_MLIR_INCLUDE_DIR})
+set(TORCH_MLIR_LIBRARIES ${TORCH_MLIR_LIBRARY})

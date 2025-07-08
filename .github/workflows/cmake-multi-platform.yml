@@ -10,8 +10,6 @@ on:
 env:
   # Build type for Release builds
   BUILD_TYPE: Release
-  # LLVM version for cache key consistency
-  LLVM_VERSION: "20.1.7"  # Update this when you change LLVM versions
 
 jobs:
   build:
@@ -135,25 +133,6 @@ jobs:
     # ============================================================================
     # Cache Configuration
     # ============================================================================
-    
-    - name: Generate LLVM cache key
-      id: llvm-cache-key
-      run: |
-        # Create a cache key based on LLVM source content
-        echo "LLVM_HASH=${{ hashFiles('ext/llvm-project/llvm/CMakeLists.txt', 'ext/llvm-project/llvm/include/llvm/Config/llvm-config.h.cmake') }}" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Cache LLVM build
-      id: cache-llvm
-      uses: actions/cache@v4
-      with:
-        path: |
-          build/ext/llvm-build
-          build/ext/llvm-install
-        key: llvm-${{ matrix.cache-prefix }}-${{ env.LLVM_VERSION }}-${{ steps.llvm-cache-key.outputs.LLVM_HASH }}-v2
-        restore-keys: |
-          llvm-${{ matrix.cache-prefix }}-${{ env.LLVM_VERSION }}-
-          llvm-${{ matrix.cache-prefix }}-
 
     - name: Cache torch-mlir dependencies
       uses: actions/cache@v4
@@ -178,22 +157,6 @@ jobs:
         cmake .. \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DCMAKE_GENERATOR_IDENTIFIER=${{ matrix.generator }}
-      shell: bash
-
-    - name: Build LLVM (if not cached)
-      if: steps.cache-llvm.outputs.cache-hit != 'true'
-      working-directory: build
-      run: |
-        echo "Building LLVM from source (not found in cache)..."
-        cmake --build . --target llvm-project --config ${{ env.BUILD_TYPE }} --parallel 2
-      shell: bash
-
-    - name: Verify LLVM cache/build
-      working-directory: build
-      run: |
-        echo "Checking LLVM installation..."
-        ls -la ext/llvm-install/ || dir ext\llvm-install\ || echo "LLVM install directory not found"
-        ls -la ext/llvm-install/bin/ || dir ext\llvm-install\bin\ || echo "LLVM bin directory not found"
       shell: bash
 
     - name: Build torch-mlir
@@ -293,9 +256,8 @@ jobs:
         echo "This workflow uses caching to speed up LLVM builds."
         echo "First-time builds may take 30-60 minutes, cached builds should complete in 5-15 minutes."
         echo ""
-        echo "Cache keys are based on:"
+        echo "Cache keys are based on: TBD"
+        echo ""
         echo "- Platform and generator type"
-        echo "- LLVM version (${{ env.LLVM_VERSION }})"
-        echo "- LLVM source content hash"
         echo ""
         echo "To clear caches, increment the version number in the cache key (currently v2)."
