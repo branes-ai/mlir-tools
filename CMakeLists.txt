@@ -143,7 +143,7 @@ else ()
 endif ()
 
 # ==============================================================================
-# Torch-MLIR Configuration
+# Torch-MLIR Configuration (using LLVM External Project approach)
 # ==============================================================================
 set(TORCHMLIR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/torch-mlir)
 set(TORCHMLIR_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/torch-mlir-build)
@@ -153,67 +153,103 @@ set(TORCHMLIR_INSTALL_DIR ${CMAKE_BINARY_DIR}/ext/torch-mlir-install)
 file(TO_CMAKE_PATH "${TORCHMLIR_INSTALL_DIR}" TORCHMLIR_INSTALL_DIR_CMAKE)
 file(TO_CMAKE_PATH "${PYTHON_EXECUTABLE}" PYTHON_EXECUTABLE_CMAKE)
 file(TO_CMAKE_PATH "${PYTHON_INCLUDE_DIR}" PYTHON_INCLUDE_DIR_CMAKE)
+file(TO_CMAKE_PATH "${TORCHMLIR_SOURCE_DIR}" TORCHMLIR_SOURCE_DIR_CMAKE)
 
-# Build the CMAKE_ARGS list for torch-mlir
+# Build torch-mlir as an LLVM external project
+# This is the correct approach - torch-mlir builds LLVM/MLIR from its submodules
+# and registers itself as an external project
 set(TORCHMLIR_CMAKE_ARGS
     "-DCMAKE_INSTALL_PREFIX=${TORCHMLIR_INSTALL_DIR_CMAKE}"
     "-DCMAKE_BUILD_TYPE=Release"
-    "-DLLVM_ENABLE_ASSERTIONS=ON"
     
     # Python configuration
     "-DPython3_EXECUTABLE=${PYTHON_EXECUTABLE_CMAKE}"
-    "-DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR_CMAKE}"
     
     # Compiler configuration
     "-DCMAKE_C_COMPILER=clang"
     "-DCMAKE_CXX_COMPILER=clang++"
     
-    # Torch-MLIR specific options
-    "-DTORCH_MLIR_ENABLE_BINDINGS_PYTHON=ON"
-    "-DTORCH_MLIR_OUT_OF_TREE_BUILD=OFF"
-    "-DTORCH_MLIR_USE_INSTALLED_PYTORCH=ON"
-    
-    # LLVM/MLIR options (using torch-mlir's internal LLVM)
-    "-DMLIR_ENABLE_BINDINGS_PYTHON=ON"
+    # LLVM configuration - torch-mlir builds LLVM from its submodule
     "-DLLVM_ENABLE_PROJECTS=mlir"
-    "-DLLVM_TARGETS_TO_BUILD=X86;NVPTX;AMDGPU"
+    "-DLLVM_EXTERNAL_PROJECTS=torch-mlir"
+    "-DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR=${TORCHMLIR_SOURCE_DIR_CMAKE}"
+    
+    # Enable Python bindings
+    "-DMLIR_ENABLE_BINDINGS_PYTHON=ON"
+    "-DTORCH_MLIR_ENABLE_BINDINGS_PYTHON=ON"
+    
+    # LLVM optimizations
+    "-DLLVM_ENABLE_ASSERTIONS=ON"
+    "-DLLVM_TARGETS_TO_BUILD=host"
     "-DLLVM_ENABLE_TERMINFO=OFF"
     "-DLLVM_ENABLE_LIBEDIT=OFF"
     "-DLLVM_ENABLE_LIBXML2=OFF"
     "-DLLVM_ENABLE_ZLIB=OFF"
     "-DLLVM_ENABLE_ZSTD=OFF"
-    "-DLLVM_PARALLEL_COMPILE_JOBS=4"
-    "-DLLVM_PARALLEL_LINK_JOBS=2"
+    "-DLLVM_PARALLEL_COMPILE_JOBS=2"
+    "-DLLVM_PARALLEL_LINK_JOBS=1"
+    
+    # Windows-specific optimizations
+    "-DLLVM_USE_CRT_RELEASE=MD"
+    "-DLLVM_ENABLE_PDB=OFF"
 )
 
-# Don't add platform args to CMAKE_ARGS since we're using dedicated properties
-# Platform args will be handled by CMAKE_GENERATOR_PLATFORM and CMAKE_GENERATOR_TOOLSET
-
-# Add Git submodule update step
+# Update torch-mlir submodules and configure as LLVM external project
 ExternalProject_Add(torch-mlir
-    SOURCE_DIR ${TORCHMLIR_SOURCE_DIR}
+    SOURCE_DIR ${TORCHMLIR_SOURCE_DIR}/externals/llvm-project/llvm
     BINARY_DIR ${TORCHMLIR_BINARY_DIR}
     
-    # Update submodules (including llvm-project and stablehlo)
+    # Update submodules first
     UPDATE_COMMAND ""
     PATCH_COMMAND ${CMAKE_COMMAND} -E chdir ${TORCHMLIR_SOURCE_DIR} 
                   git submodule update --init --recursive
     
+    # Configure LLVM with torch-mlir as external project
     CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
     CMAKE_GENERATOR_PLATFORM ${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}
     CMAKE_ARGS ${TORCHMLIR_CMAKE_ARGS}
     
-    # Build specific targets
-    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+    # Build and install
+    #BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+    #INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+    # this failed without an err log, indicating with high probability that we ran into resource constraints
+
+    # Build and install with more specific targeting and verbose output
+    #BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt --parallel 2 --verbose
+    #INSTALL_COMMAND ""
+    # this produced a successful build in about 45min
     
-    # Install
-    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
-    
+    # Build and install with more specific targeting and verbose output
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt TorchMLIRPythonModules --parallel 2
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --parallel 2
+    # reenabling the install command but this time with a little resource constraint
+
     # Log output for debugging
     LOG_CONFIGURE ON
     LOG_BUILD ON
     LOG_INSTALL ON
 )
+
+# ==============================================================================
+# Now when you build this, you should get:
+#
+#   torch-mlir-opt: The main torch-mlir optimizer tool
+#   Python bindings: So you can use torch-mlir from Python
+#   Proper installation: Everything installed to D:/build/mlir-tools/build_msvc/ext/torch-mlir-install
+#
+# The installed directory should contain:
+#
+#   bin/torch-mlir-opt.exe - The main tool
+#   lib/ - Libraries for linking against torch-mlir
+#   include/ - Headers for C++ development
+#   python_packages/torch_mlir/ - Python module
+#
+# This gives you a complete, usable torch-mlir installation that you can use 
+# for your MLIR development work. 
+# The conservative build settings ensure it should build reliably on your Windows 
+# system without running into resource exhaustion issues.
+#
+# ==============================================================================
 
 # ==============================================================================
 # Export Configuration
@@ -237,4 +273,5 @@ message(STATUS "Install directory: ${TORCHMLIR_INSTALL_DIR}")
 message(STATUS "Python executable: ${PYTHON_EXECUTABLE}")
 message(STATUS "Python version: ${PYTHON_VERSION}")
 message(STATUS "Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
+message(STATUS "Building torch-mlir as LLVM external project")
 message(STATUS "===========================================")
