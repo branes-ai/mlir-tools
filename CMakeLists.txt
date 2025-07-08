@@ -13,6 +13,7 @@ endif()
 # The python dependencies, pybind11, nanobind, and numpy need to be installed in this venv
 # for the build to work.
 # With Linux this is all dynamically picked up the shell environment.
+# You can null this option to get the virtual path in the dynamic configuration section
 set(PYTHON_EXECUTABLE "D:/Python/venv/p310/Scripts/python.exe" CACHE FILEPATH "Python executable")
 
 # ==============================================================================
@@ -38,6 +39,44 @@ set(PYTHON_EXECUTABLE "D:/Python/venv/p310/Scripts/python.exe" CACHE FILEPATH "P
 # This way, CMake GUI inherits the virtual environment's PATH and environment variables.
 #
 # Allow overriding Python executable via command line: -DPYTHON_EXECUTABLE=path/to/python
+#
+#
+# Usage Linux
+#
+# create a virtual environment of your choice
+#   python3.10 -m venv ~/venv/p310
+# activate the virtual environment
+#   source ~/venv/p310/bin/activate
+#
+# install the python dependencies
+#    python -m pip install pybind11 nanobind numpy
+#
+# generate the build files
+#    cmake -DCMAKE_GENERATOR_IDENTIFIER=NINJA -DPYTHON_EXECUTABLE="" ..
+#-- Virtual environment detected: /home/stillwater/venv/p310
+#-- Using virtual environment Python: /home/stillwater/venv/p310/bin/python
+#-- Using Python: /home/stillwater/venv/p310/bin/python
+#-- Python version: 3.10
+#-- Python include dir: /usr/include/python3.10
+#-- Pybind11 installed: Python: /home/stillwater/venv/p310/bin/python
+#pybind11: 2.13.6
+#
+#-- Nanobind installed: Python: /home/stillwater/venv/p310/bin/python
+#nanobind: 2.7.0
+#
+#-- Configuring for Ninja Generator
+#-- ==== Torch-MLIR Configuration Summary ====
+#-- Source directory: /home/stillwater/dev/clones/mlir-tools/ext/torch-mlir
+#-- Binary directory: /home/stillwater/dev/clones/mlir-tools/build_clang/ext/torch-mlir-build
+#-- Install directory: /home/stillwater/dev/clones/mlir-tools/build_clang/ext/torch-mlir-install
+#-- Python executable: /home/stillwater/venv/p310/bin/python
+#-- Python version: 3.10
+#-- Generator: Ninja
+#-- Building torch-mlir as LLVM external project
+#-- ===========================================
+#-- Configuring done
+#-- Generating done
+#-- Build files have been written to: /home/stillwater/dev/clones/mlir-tools/build_clang
 
 # ==============================================================================
 # Python Environment Configuration (GUI-friendly)
@@ -176,23 +215,30 @@ set(TORCHMLIR_CMAKE_ARGS
     
     # Enable Python bindings
     "-DMLIR_ENABLE_BINDINGS_PYTHON=ON"
-    "-DTORCH_MLIR_ENABLE_BINDINGS_PYTHON=ON"
     
-    # LLVM optimizations
+    # LLVM optimizations- cross-platform
     "-DLLVM_ENABLE_ASSERTIONS=ON"
     "-DLLVM_TARGETS_TO_BUILD=host"
-    "-DLLVM_ENABLE_TERMINFO=OFF"
-    "-DLLVM_ENABLE_LIBEDIT=OFF"
-    "-DLLVM_ENABLE_LIBXML2=OFF"
-    "-DLLVM_ENABLE_ZLIB=OFF"
-    "-DLLVM_ENABLE_ZSTD=OFF"
     "-DLLVM_PARALLEL_COMPILE_JOBS=2"
     "-DLLVM_PARALLEL_LINK_JOBS=1"
-    
-    # Windows-specific optimizations
-    "-DLLVM_USE_CRT_RELEASE=MD"
-    "-DLLVM_ENABLE_PDB=OFF"
 )
+
+# Add platform-specific optimizations
+if(WIN32)
+    list(APPEND TORCHMLIR_CMAKE_ARGS
+        "-DLLVM_USE_CRT_RELEASE=MD"
+        "-DLLVM_ENABLE_PDB=OFF"
+    )
+else()
+    list(APPEND TORCHMLIR_CMAKE_ARGS
+        "-DLLVM_ENABLE_TERMINFO=OFF"
+        "-DLLVM_ENABLE_LIBEDIT=OFF"
+        "-DLLVM_ENABLE_LIBXML2=OFF"
+        "-DLLVM_ENABLE_ZLIB=OFF"
+        "-DLLVM_ENABLE_ZSTD=OFF"
+    )
+endif()
+
 
 # Update torch-mlir submodules and configure as LLVM external project
 ExternalProject_Add(torch-mlir
@@ -203,6 +249,8 @@ ExternalProject_Add(torch-mlir
     UPDATE_COMMAND ""
     PATCH_COMMAND ${CMAKE_COMMAND} -E chdir ${TORCHMLIR_SOURCE_DIR} 
                   git submodule update --init --recursive
+                  COMMAND ${CMAKE_COMMAND} -E remove_directory ${TORCHMLIR_BINARY_DIR}
+                  COMMAND ${CMAKE_COMMAND} -E make_directory ${TORCHMLIR_BINARY_DIR}
     
     # Configure LLVM with torch-mlir as external project
     CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
