@@ -1,13 +1,27 @@
 cmake_minimum_required(VERSION 3.23)
+
+# Set compilers before project() call - must be done BEFORE project()
+# This will only set if not already set by environment or command line
+if(NOT DEFINED CMAKE_C_COMPILER)
+    find_program(CLANG_C_COMPILER clang)
+    if(CLANG_C_COMPILER)
+        set(CMAKE_C_COMPILER ${CLANG_C_COMPILER})
+    else()
+        message(WARNING "clang not found, falling back to default C compiler")
+    endif()
+endif()
+
+if(NOT DEFINED CMAKE_CXX_COMPILER)
+    find_program(CLANG_CXX_COMPILER clang++)
+    if(CLANG_CXX_COMPILER)
+        set(CMAKE_CXX_COMPILER ${CLANG_CXX_COMPILER})
+    else()
+        message(WARNING "clang++ not found, falling back to default C++ compiler")
+    endif()
+endif()
+
 project(mlir_tools_superbuild C CXX)
 
-# Set compilers to Clang before project() call (can be overridden by environment)
-if(NOT CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER clang)
-endif()
-if(NOT CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER clang++)
-endif()
 
 # When using the CMake GUI, we need to point to the venv python required
 # The python dependencies, pybind11, nanobind, and numpy need to be installed in this venv
@@ -283,8 +297,6 @@ set(TORCHMLIR_CMAKE_ARGS
     # LLVM optimizations- cross-platform
     "-DLLVM_ENABLE_ASSERTIONS=ON"
     "-DLLVM_TARGETS_TO_BUILD=host"
-    "-DLLVM_PARALLEL_COMPILE_JOBS=2"
-    "-DLLVM_PARALLEL_LINK_JOBS=1"
 )
 
 # Add platform-specific optimizations
@@ -292,10 +304,13 @@ if(WIN32)
     list(APPEND TORCHMLIR_CMAKE_ARGS
         "-DLLVM_USE_CRT_RELEASE=MD"
         "-DLLVM_ENABLE_PDB=OFF"
+        "-DLLVM_PARALLEL_COMPILE_JOBS=2"
+        "-DLLVM_PARALLEL_LINK_JOBS=1"
     )
 else()
+    # On Linux, let Ninja handle parallelism automatically
+    # Don't set LLVM_PARALLEL_*_JOBS as they conflict with Ninja pools
     list(APPEND TORCHMLIR_CMAKE_ARGS
-        "-DLLVM_ENABLE_TERMINFO=OFF"
         "-DLLVM_ENABLE_LIBEDIT=OFF"
         "-DLLVM_ENABLE_LIBXML2=OFF"
         "-DLLVM_ENABLE_ZLIB=OFF"
@@ -332,9 +347,9 @@ endif()
     # this produced a successful build in about 45min
     
     # Build and install with more specific targeting and verbose output
-#    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt TorchMLIRPythonModules --parallel 8
-#    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --parallel 1
-    # reenabling the install command but this time with a little resource constraint
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt TorchMLIRPythonModules --parallel 2
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --parallel 1
+    # reenabling the install command but this time with a small resource constraint
 
     # Log output for debugging
 #    LOG_CONFIGURE ON
