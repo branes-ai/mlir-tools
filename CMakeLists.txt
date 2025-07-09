@@ -181,6 +181,70 @@ else ()
     message(FATAL_ERROR "Unsupported CMAKE_GENERATOR_IDENTIFIER: ${CMAKE_GENERATOR_IDENTIFIER}. Please choose MSVC or NINJA.")
 endif ()
 
+
+# ==============================================================================
+# Smart Build Caching and Resource Management
+# ==============================================================================
+
+# Option to skip torch-mlir rebuild if it's already built
+option(SKIP_TORCHMLIR_BUILD "Skip torch-mlir build if already present" ON)
+
+# Option to use pre-built torch-mlir from a specific directory
+set(PREBUILT_TORCHMLIR_DIR "" CACHE PATH "Path to pre-built torch-mlir installation")
+
+# Option to enable ccache for faster rebuilds
+option(USE_CCACHE "Use ccache for faster compilation" ON)
+
+# Resource constraint options for Windows builds
+set(LLVM_PARALLEL_COMPILE_JOBS "1" CACHE STRING "Number of parallel compile jobs for LLVM")
+set(LLVM_PARALLEL_LINK_JOBS "1" CACHE STRING "Number of parallel link jobs for LLVM")
+
+# CCache Configuration
+if(USE_CCACHE AND NOT WIN32)  # ccache is less reliable on Windows
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        message(STATUS "Found ccache: ${CCACHE_PROGRAM}")
+        set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    endif()
+endif()
+
+# ==============================================================================
+# Smart Rebuild Detection
+# ==============================================================================
+
+# Check if torch-mlir is already properly built
+set(TORCHMLIR_NEEDS_BUILD TRUE)
+
+if(SKIP_TORCHMLIR_BUILD OR PREBUILT_TORCHMLIR_DIR)
+    if(PREBUILT_TORCHMLIR_DIR)
+        get_filename_component(TORCHMLIR_INSTALL_DIR "${PREBUILT_TORCHMLIR_DIR}" ABSOLUTE)
+        message(STATUS "Using pre-built torch-mlir from: ${TORCHMLIR_INSTALL_DIR}")
+    endif()
+    
+    # Check if key files exist
+    set(KEY_FILES
+        "${TORCHMLIR_INSTALL_DIR}/bin/torch-mlir-opt${CMAKE_EXECUTABLE_SUFFIX}"
+        "${TORCHMLIR_INSTALL_DIR}/lib/cmake/torch-mlir/TorchMLIRConfig.cmake"
+    )
+    
+    set(ALL_FILES_EXIST TRUE)
+    foreach(FILE ${KEY_FILES})
+        if(NOT EXISTS "${FILE}")
+            set(ALL_FILES_EXIST FALSE)
+            message(STATUS "Missing torch-mlir file: ${FILE}")
+            break()
+        endif()
+    endforeach()
+    
+    if(ALL_FILES_EXIST)
+        set(TORCHMLIR_NEEDS_BUILD FALSE)
+        message(STATUS "Torch-MLIR is available, skipping rebuild")
+    else()
+        message(STATUS "Torch-MLIR not found or incomplete, will build")
+    endif()
+endif()
+
 # ==============================================================================
 # Torch-MLIR Configuration (using LLVM External Project approach)
 # ==============================================================================
@@ -241,21 +305,21 @@ endif()
 
 
 # Update torch-mlir submodules and configure as LLVM external project
-ExternalProject_Add(torch-mlir
-    SOURCE_DIR ${TORCHMLIR_SOURCE_DIR}/externals/llvm-project/llvm
-    BINARY_DIR ${TORCHMLIR_BINARY_DIR}
-    
+#ExternalProject_Add(torch-mlir
+#    SOURCE_DIR ${TORCHMLIR_SOURCE_DIR}/externals/llvm-project/llvm
+#    BINARY_DIR ${TORCHMLIR_BINARY_DIR}
+#    
     # Update submodules first
-    UPDATE_COMMAND ""
-    PATCH_COMMAND ${CMAKE_COMMAND} -E chdir ${TORCHMLIR_SOURCE_DIR} 
-                  git submodule update --init --recursive
-                  COMMAND ${CMAKE_COMMAND} -E remove_directory ${TORCHMLIR_BINARY_DIR}
-                  COMMAND ${CMAKE_COMMAND} -E make_directory ${TORCHMLIR_BINARY_DIR}
+#    UPDATE_COMMAND ""
+#    PATCH_COMMAND ${CMAKE_COMMAND} -E chdir ${TORCHMLIR_SOURCE_DIR} 
+#                  git submodule update --init --recursive
+#                  COMMAND ${CMAKE_COMMAND} -E remove_directory ${TORCHMLIR_BINARY_DIR}
+#                  COMMAND ${CMAKE_COMMAND} -E make_directory ${TORCHMLIR_BINARY_DIR}
     
     # Configure LLVM with torch-mlir as external project
-    CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
-    CMAKE_GENERATOR_PLATFORM ${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}
-    CMAKE_ARGS ${TORCHMLIR_CMAKE_ARGS}
+#    CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
+#    CMAKE_GENERATOR_PLATFORM ${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}
+#    CMAKE_ARGS ${TORCHMLIR_CMAKE_ARGS}
     
     # Build and install
     #BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
@@ -268,15 +332,15 @@ ExternalProject_Add(torch-mlir
     # this produced a successful build in about 45min
     
     # Build and install with more specific targeting and verbose output
-    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt TorchMLIRPythonModules --parallel 2
-    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --parallel 2
+#    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt TorchMLIRPythonModules --parallel 8
+#    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --parallel 1
     # reenabling the install command but this time with a little resource constraint
 
     # Log output for debugging
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-    LOG_INSTALL ON
-)
+#    LOG_CONFIGURE ON
+#    LOG_BUILD ON
+#    LOG_INSTALL ON
+#)
 
 # ==============================================================================
 # Now when you build this, you should get:
@@ -298,6 +362,123 @@ ExternalProject_Add(torch-mlir
 # system without running into resource exhaustion issues.
 #
 # ==============================================================================
+
+# Build torch-mlir only if needed
+if(TORCHMLIR_NEEDS_BUILD)
+    message(STATUS "Building torch-mlir (this may take a while)...")
+    
+    # More conservative resource settings for Windows
+    if(WIN32)
+        set(LLVM_PARALLEL_COMPILE_JOBS "1")
+        set(LLVM_PARALLEL_LINK_JOBS "1")
+    endif()
+    
+    list(APPEND TORCHMLIR_CMAKE_ARGS
+        "-DLLVM_PARALLEL_COMPILE_JOBS=${LLVM_PARALLEL_COMPILE_JOBS}"
+        "-DLLVM_PARALLEL_LINK_JOBS=${LLVM_PARALLEL_LINK_JOBS}"
+        
+        # Additional memory/resource optimizations
+        "-DLLVM_USE_SPLIT_DWARF=OFF"  # Reduces memory usage
+        "-DLLVM_ENABLE_PDB=OFF"       # Reduces disk I/O on Windows
+        "-DLLVM_BUILD_EXAMPLES=OFF"   # Skip examples
+        "-DLLVM_BUILD_TESTS=OFF"      # Skip LLVM tests initially
+        "-DLLVM_INCLUDE_TESTS=OFF"    # Don't include test targets
+    )
+
+    # Add ccache if available and not Windows
+    if(CCACHE_PROGRAM AND NOT WIN32)
+        list(APPEND TORCHMLIR_CMAKE_ARGS
+            "-DCMAKE_C_COMPILER_LAUNCHER=${CCACHE_PROGRAM}"
+            "-DCMAKE_CXX_COMPILER_LAUNCHER=${CCACHE_PROGRAM}"
+        )
+    endif()
+
+    ExternalProject_Add(torch-mlir
+        SOURCE_DIR ${TORCHMLIR_SOURCE_DIR}/externals/llvm-project/llvm
+        BINARY_DIR ${TORCHMLIR_BINARY_DIR}
+        
+        UPDATE_COMMAND ""
+        PATCH_COMMAND ${CMAKE_COMMAND} -E chdir ${TORCHMLIR_SOURCE_DIR} 
+                      git submodule update --init --recursive
+                      COMMAND ${CMAKE_COMMAND} -E remove_directory ${TORCHMLIR_BINARY_DIR}
+                      COMMAND ${CMAKE_COMMAND} -E make_directory ${TORCHMLIR_BINARY_DIR}
+        
+        CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
+        CMAKE_GENERATOR_PLATFORM ${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}
+        CMAKE_ARGS ${TORCHMLIR_CMAKE_ARGS}
+        
+        # More conservative build command for Windows
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target torch-mlir-opt TorchMLIRPythonModules --parallel ${LLVM_PARALLEL_COMPILE_JOBS}
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --parallel ${LLVM_PARALLEL_LINK_JOBS}
+        
+        # Only build when actually needed
+        BUILD_ALWAYS FALSE
+        
+        LOG_CONFIGURE ON
+        LOG_BUILD ON
+        LOG_INSTALL ON
+    )
+    
+    set(TORCHMLIR_TARGET torch-mlir)
+else()
+    message(STATUS "Using existing torch-mlir installation: ${TORCHMLIR_INSTALL_DIR}")
+    
+    # Create a dummy target for consistency
+    add_custom_target(torch-mlir
+        COMMAND ${CMAKE_COMMAND} -E echo "Using pre-built torch-mlir from ${TORCHMLIR_INSTALL_DIR}"
+        COMMENT "Torch-MLIR already available"
+    )
+    
+    set(TORCHMLIR_TARGET torch-mlir)
+endif()
+
+
+# ==============================================================================
+# MLIR Tools Source Directory
+# ==============================================================================
+
+# Enable building the tools after torch-mlir is installed
+option(BUILD_MLIR_TOOLS "Build the mlir-tools source directory" ON)
+
+if(BUILD_MLIR_TOOLS)
+    # Add the src directory as an external project that depends on torch-mlir
+    ExternalProject_Add(mlir-tools-src
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/src
+        BINARY_DIR ${CMAKE_BINARY_DIR}/src
+        
+        # No download/update needed - it's local source
+        DOWNLOAD_COMMAND ""
+        UPDATE_COMMAND ""
+        PATCH_COMMAND ""
+        
+        # Configure after torch-mlir is built
+        CMAKE_GENERATOR ${SUPERBUILD_CMAKE_GENERATOR}
+        CMAKE_GENERATOR_PLATFORM ${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}
+        CMAKE_ARGS
+            "-DCMAKE_BUILD_TYPE=Release"
+            "-DCMAKE_C_COMPILER=clang"
+            "-DCMAKE_CXX_COMPILER=clang++"
+            "-DTORCHMLIR_INSTALL_DIR=${TORCHMLIR_INSTALL_DIR_CMAKE}"
+            "-DPython3_EXECUTABLE=${PYTHON_EXECUTABLE_CMAKE}"
+            "-DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install"
+            
+        # Depend on torch-mlir being built first
+        DEPENDS torch-mlir
+        
+        # Build and install
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --parallel 2
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+        
+        # Log output
+        LOG_CONFIGURE ON
+        LOG_BUILD ON
+        LOG_INSTALL ON
+    )
+    
+    # Create a convenient alias target
+    add_custom_target(tools DEPENDS mlir-tools-src)
+endif()
+
 
 # ==============================================================================
 # Export Configuration
@@ -321,5 +502,10 @@ message(STATUS "Install directory: ${TORCHMLIR_INSTALL_DIR}")
 message(STATUS "Python executable: ${PYTHON_EXECUTABLE}")
 message(STATUS "Python version: ${PYTHON_VERSION}")
 message(STATUS "Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
+message(STATUS "===========================================")
 message(STATUS "Building torch-mlir as LLVM external project")
+if(BUILD_MLIR_TOOLS)
+    message(STATUS "Building mlir-tools source directory: ${CMAKE_SOURCE_DIR}/src")
+    message(STATUS "Tools install directory: ${CMAKE_BINARY_DIR}/install")
+endif()
 message(STATUS "===========================================")

@@ -1,0 +1,8 @@
+# Build tools only (should be very fast)
+cmake --build . --target tools
+
+# Check what's already built
+cmake --build . --target build-status
+
+# Clean rebuild tools only (not torch-mlir)
+cmake --build . --target rebuild-tools
