@@ -56,6 +56,11 @@ endif()
 
 project(mlir_tools C CXX)
 
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "v")
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_EXTENSIONS OFF)
+message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")
+
 # ==============================================================================
 # Generator Selection Mechanism
 # ==============================================================================
@@ -67,7 +72,6 @@ set(CMAKE_GENERATOR_IDENTIFIER "MSVC" CACHE STRING "Select the CMake generator t
 message(STATUS "# ========================================================")
 message(STATUS "# Generator Selection")
 message(STATUS "# ========================================================")
-message(STATUS "")
 
 # Determine the actual generator and platform arguments based on GEN_TYPE
 if (CMAKE_GENERATOR_IDENTIFIER STREQUAL "MSVC")
@@ -75,15 +79,15 @@ if (CMAKE_GENERATOR_IDENTIFIER STREQUAL "MSVC")
     set(SUPERBUILD_CMAKE_GENERATOR_PLATFORM "x64")
     set(SUPERBUILD_CMAKE_TOOLSET_ARGS "-T;host=x64") # For MSVC, specify host toolset
     set(SUPERBUILD_PLATFORM_ARGS "-A;${SUPERBUILD_CMAKE_GENERATOR_PLATFORM}")
-    message(STATUS "Configuring for MSVC Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
+    message(STATUS "    Configuring for MSVC Generator: ${SUPERBUILD_CMAKE_GENERATOR}")
 elseif (CMAKE_GENERATOR_IDENTIFIER STREQUAL "NINJA")
     set(SUPERBUILD_CMAKE_GENERATOR "Ninja")
     set(SUPERBUILD_CMAKE_GENERATOR_PLATFORM "") # Ninja doesn't typically use -A/-T
     set(SUPERBUILD_CMAKE_TOOLSET_ARGS "") # No specific toolset args for Ninja
     set(SUPERBUILD_PLATFORM_ARGS "") # No platform args for Ninja
-    message(STATUS "Configuring for Ninja Generator")
+    message(STATUS "    Configuring for Ninja Generator")
 else ()
-    message(FATAL_ERROR "Unsupported CMAKE_GENERATOR_IDENTIFIER: ${CMAKE_GENERATOR_IDENTIFIER}. Please choose MSVC or NINJA.")
+    message(FATAL_ERROR "    Unsupported CMAKE_GENERATOR_IDENTIFIER: ${CMAKE_GENERATOR_IDENTIFIER}. Please choose MSVC or NINJA.")
 endif ()
 
 # ==============================================================================
@@ -100,7 +104,6 @@ endif ()
 
 set(PYTHON_EXECUTABLE "D:/Python/venv/p310/Scripts/python.exe" CACHE FILEPATH "Python executable to use for integration (virtual/specific/system)")
 
-
 message(STATUS "# ========================================================")
 message(STATUS "# Python Environment")
 message(STATUS "# ========================================================")
@@ -114,10 +117,11 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
 # Verify we're using the right Python
 message(STATUS "=== Python Configuration Check ===")
-message(STATUS "PYTHON_EXECUTABLE: ${PYTHON_EXECUTABLE}")
-message(STATUS "Python3_EXECUTABLE: ${Python3_EXECUTABLE}")
-message(STATUS "Python3_VERSION: ${Python3_VERSION}")
-message(STATUS "Python3_INCLUDE_DIRS: ${Python3_INCLUDE_DIRS}")
+message(STATUS "PYTHON_EXECUTABLE    : ${PYTHON_EXECUTABLE}")
+message(STATUS "Python3_EXECUTABLE   : ${Python3_EXECUTABLE}")
+message(STATUS "Python3_VERSION      : ${Python3_VERSION}")
+message(STATUS "Python3_INCLUDE_DIRS : ${Python3_INCLUDE_DIRS}")
+message(STATUS "Python3_LIBRARIES    : ${Python3_LIBRARIES}")
 message(STATUS "===================================")
 
 # Force all subsequent find_package(Python3) calls to use our executable
@@ -136,10 +140,6 @@ execute_process(
     OUTPUT_VARIABLE PYTHON_INCLUDE_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-
-message(STATUS "Using Python: ${PYTHON_EXECUTABLE}")
-message(STATUS "Python version: ${PYTHON_VERSION}")
-message(STATUS "Python include dir: ${PYTHON_INCLUDE_DIR}")
 
 # Verify the Python works and has pybind11
 execute_process(
@@ -171,6 +171,10 @@ endif()
 # LLVM/MLIR: Build Directly with Its Own CMake
 # ==============================================================================
 
+message(STATUS "# ========================================================")
+message(STATUS "# LLVM/MLIR Configuration")
+message(STATUS "# ========================================================")
+
 # LLVM Configuration
 set(LLVM_ENABLE_PROJECTS "mlir" CACHE STRING "LLVM projects to build")
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
@@ -199,16 +203,16 @@ if(CMAKE_GENERATOR_IDENTIFIER MATCHES "NINJA")
 endif()
 
 # Set Python for torch-mlir - use the same variables LLVM expects
-set(Python3_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python3 executable" FORCE)
-set(Python_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
+#set(Python3_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python3 executable" FORCE)
+#set(Python_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
 
 # Also set the include dirs and libraries from our Python search
-if(Python3_INCLUDE_DIRS)
-    set(Python3_INCLUDE_DIRS ${Python3_INCLUDE_DIRS} CACHE PATH "Python3 include dirs" FORCE)
-endif()
-if(Python3_LIBRARIES)
-    set(Python3_LIBRARIES ${Python3_LIBRARIES} CACHE FILEPATH "Python3 libraries" FORCE)
-endif()
+#if(Python3_INCLUDE_DIRS)
+#    set(Python3_INCLUDE_DIRS ${Python3_INCLUDE_DIRS} CACHE PATH "Python3 include dirs" FORCE)
+#endif()
+#if(Python3_LIBRARIES)
+#    set(Python3_LIBRARIES ${Python3_LIBRARIES} CACHE FILEPATH "Python3 libraries" FORCE)
+#endif()
 
 # Set up torch-mlir as LLVM external project BEFORE calling llvm-project
 set(LLVM_EXTERNAL_PROJECTS "torch-mlir" CACHE STRING "External projects")
@@ -253,6 +257,10 @@ endfunction()
 # ==============================================================================
 # Add Your Tools Here
 # ==============================================================================
+
+message(STATUS "# ========================================================")
+message(STATUS "# MLIR-tools Configuration")
+message(STATUS "# ========================================================")
 
 # Add the onnx-c-importer tool
 add_torch_mlir_tool(onnx-c-importer
