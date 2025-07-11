@@ -103,20 +103,45 @@ message(STATUS "# ========================================================")
 message(STATUS "# Python Environment")
 message(STATUS "# ========================================================")
 
+# Configure python first - FORCE LLVM to use our specific Python
+# Allow override from command line, otherwise auto-detect
+if(NOT PYTHON_EXECUTABLE)
+    if(WIN32)
+        # On Windows, prefer the python in PATH (from GitHub Actions or user setup)
+        find_program(PYTHON_EXECUTABLE NAMES python python.exe 
+                     DOC "Python executable")
+    else()
+        # On Linux, prefer python3.10, then python3, then python
+        find_program(PYTHON_EXECUTABLE NAMES python3.10 python3 python
+                     DOC "Python executable")
+    endif()
+    
+    if(NOT PYTHON_EXECUTABLE)
+        message(FATAL_ERROR "Python executable not found. Please install Python or set PYTHON_EXECUTABLE manually.")
+    endif()
+endif()
+
+# Verify Python is working
+execute_process(
+    COMMAND ${PYTHON_EXECUTABLE} --version
+    RESULT_VARIABLE PYTHON_TEST_RESULT
+    OUTPUT_VARIABLE PYTHON_VERSION_OUTPUT
+    ERROR_VARIABLE PYTHON_VERSION_ERROR
+)
+
+if(NOT PYTHON_TEST_RESULT EQUAL 0)
+    message(FATAL_ERROR "Python executable ${PYTHON_EXECUTABLE} is not working: ${PYTHON_VERSION_ERROR}")
+endif()
+
+message(STATUS "Found Python: ${PYTHON_EXECUTABLE}")
+message(STATUS "Python version: ${PYTHON_VERSION_OUTPUT}")
+
 # CRITICAL: Set all Python variables that LLVM/MLIR might use
 set(Python3_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python3 executable" FORCE)
 set(Python_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
 
 # Find Python using our specified executable to get the right paths
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
-
-# Also set the include dirs and libraries from our Python search
-if(Python3_INCLUDE_DIRS)
-    set(Python3_INCLUDE_DIRS ${Python3_INCLUDE_DIRS} CACHE PATH "Python3 include dirs" FORCE)
-endif()
-if(Python3_LIBRARIES)
-    set(Python3_LIBRARIES ${Python3_LIBRARIES} CACHE FILEPATH "Python3 libraries" FORCE)
-endif()
 
 # Verify we're using the right Python
 message(STATUS "=== Python Configuration Check ===")
@@ -131,43 +156,33 @@ message(STATUS "===================================")
 set(Python3_FIND_REGISTRY "NEVER" CACHE STRING "Never use registry to find Python3")
 set(Python3_FIND_FRAMEWORK "NEVER" CACHE STRING "Never use framework to find Python3")
 
-# Get Python version and include directory
+# Verify Python dependencies are available
+# Verify pybind11
 execute_process(
-    COMMAND ${PYTHON_EXECUTABLE} -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-    OUTPUT_VARIABLE PYTHON_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-execute_process(
-    COMMAND ${PYTHON_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_path('include'))"
-    OUTPUT_VARIABLE PYTHON_INCLUDE_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-# Verify the Python works and has pybind11
-execute_process(
-    COMMAND ${PYTHON_EXECUTABLE} -c "import sys, pybind11; print(f'Python: {sys.executable}'); print(f'pybind11: {pybind11.__version__}')"
+    COMMAND ${PYTHON_EXECUTABLE} -c "import pybind11; print(f'pybind11: {pybind11.__version__}')"
     RESULT_VARIABLE PYBIND_TEST_RESULT
     OUTPUT_VARIABLE PYBIND_TEST_OUTPUT
+    ERROR_VARIABLE PYBIND_TEST_ERROR
 )
 
 if(NOT PYBIND_TEST_RESULT EQUAL 0)
-    message(FATAL_ERROR " Pybind11 not found: please install in the selected venv first (typically: python -m pip install pybind11)")
+    message(FATAL_ERROR "Pybind11 not found: please install in the selected venv first (typically: python -m pip install pybind11)\nError: ${PYBIND_TEST_ERROR}")
 else()
-    message(STATUS "Pybind11 installed: ${PYBIND_TEST_OUTPUT}")
+    message(STATUS "Pybind11 found: ${PYBIND_TEST_OUTPUT}")
 endif()
 
-# Verify the Python venv has nanobind
+# Verify nanobind
 execute_process(
-    COMMAND ${PYTHON_EXECUTABLE} -c "import sys, nanobind; print(f'Python: {sys.executable}'); print(f'nanobind: {nanobind.__version__}')"
+    COMMAND ${PYTHON_EXECUTABLE} -c "import nanobind; print(f'nanobind: {nanobind.__version__}')"
     RESULT_VARIABLE NANOBIND_TEST_RESULT
     OUTPUT_VARIABLE NANOBIND_TEST_OUTPUT
+    ERROR_VARIABLE NANOBIND_TEST_ERROR
 )
 
 if(NOT NANOBIND_TEST_RESULT EQUAL 0)
-    message(FATAL_ERROR "Nanobind not found: please install in the selected venv first (typically: python -m pip install nanobind)")
+    message(FATAL_ERROR "Nanobind not found: please install in the selected venv first (typically: python -m pip install nanobind)\nError: ${NANOBIND_TEST_ERROR}")
 else()
-    message(STATUS "Nanobind installed: ${NANOBIND_TEST_OUTPUT}")
+    message(STATUS "Nanobind found: ${NANOBIND_TEST_OUTPUT}")
 endif()
 
 # ==============================================================================
@@ -179,11 +194,15 @@ message(STATUS "# LLVM/MLIR Configuration")
 message(STATUS "# ========================================================")
 
 # LLVM Configuration
+set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type")
 set(LLVM_ENABLE_PROJECTS "mlir" CACHE STRING "LLVM projects to build")
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
-set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type")
 set(LLVM_ENABLE_ASSERTIONS ON CACHE BOOL "Enable assertions")
 set(MLIR_ENABLE_BINDINGS_PYTHON ON CACHE BOOL "Enable Python bindings")
+
+# Set up torch-mlir as LLVM external project BEFORE calling llvm-project
+set(LLVM_EXTERNAL_PROJECTS "torch-mlir" CACHE STRING "External projects")
+set(LLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ext/torch-mlir CACHE PATH "Torch-MLIR source")
 
 # C++ Standard - Force C++17 to match what StableHLO expects
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard")
@@ -220,10 +239,6 @@ if(WIN32)
     set(STABLEHLO_BUILD_TESTCASE_BUILDER OFF CACHE BOOL "Disable StableHLO testcase builder")
     set(STABLEHLO_ENABLE_BINDINGS_PYTHON OFF CACHE BOOL "Disable StableHLO Python bindings")
 endif()
-
-# Set up torch-mlir as LLVM external project BEFORE calling llvm-project
-set(LLVM_EXTERNAL_PROJECTS "torch-mlir" CACHE STRING "External projects")
-set(LLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ext/torch-mlir CACHE PATH "Torch-MLIR source")
 
 # Include LLVM's main CMakeLists.txt from the torch-mlir submodule
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/torch-mlir/externals/llvm-project/llvm)
