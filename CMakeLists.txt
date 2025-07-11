@@ -56,11 +56,6 @@ endif()
 
 project(mlir_tools C CXX)
 
-set(CMAKE_CXX_STANDARD 20 CACHE STRING "v")
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_EXTENSIONS OFF)
-message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")
-
 # ==============================================================================
 # Generator Selection Mechanism
 # ==============================================================================
@@ -114,6 +109,14 @@ set(Python_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FO
 
 # Find Python using our specified executable to get the right paths
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+
+# Also set the include dirs and libraries from our Python search
+if(Python3_INCLUDE_DIRS)
+    set(Python3_INCLUDE_DIRS ${Python3_INCLUDE_DIRS} CACHE PATH "Python3 include dirs" FORCE)
+endif()
+if(Python3_LIBRARIES)
+    set(Python3_LIBRARIES ${Python3_LIBRARIES} CACHE FILEPATH "Python3 libraries" FORCE)
+endif()
 
 # Verify we're using the right Python
 message(STATUS "=== Python Configuration Check ===")
@@ -182,8 +185,22 @@ set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type")
 set(LLVM_ENABLE_ASSERTIONS ON CACHE BOOL "Enable assertions")
 set(MLIR_ENABLE_BINDINGS_PYTHON ON CACHE BOOL "Enable Python bindings")
 
+# C++ Standard - Force C++17 to match what StableHLO expects
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard")
+set(CMAKE_CXX_STANDARD_REQUIRED ON CACHE BOOL "Require C++ standard")
+set(LLVM_CXX_STD "c++17" CACHE STRING "LLVM C++ standard")
+message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")
+
+# Disable StableHLO to avoid Windows compilation issues
+set(TORCH_MLIR_ENABLE_STABLEHLO OFF CACHE BOOL "Disable StableHLO for Windows compatibility")
+
 # Windows-specific optimizations
 if(WIN32)
+    # These pooling options only work with Ninja, skip them for Visual Studio
+    if(CMAKE_GENERATOR_IDENTIFIER MATCHES "NINJA")
+        set(LLVM_PARALLEL_COMPILE_JOBS 1 CACHE STRING "Parallel compile jobs")
+        set(LLVM_PARALLEL_LINK_JOBS 1 CACHE STRING "Parallel link jobs")
+    endif()
     set(LLVM_USE_CRT_RELEASE MD CACHE STRING "CRT for release builds")
     set(LLVM_ENABLE_PDB OFF CACHE BOOL "Enable PDB")
     set(LLVM_BUILD_EXAMPLES OFF CACHE BOOL "Build examples")
@@ -194,25 +211,15 @@ if(WIN32)
     set(LLVM_ENABLE_LIBXML2 OFF CACHE BOOL "Enable libxml2")
     set(LLVM_ENABLE_ZLIB OFF CACHE BOOL "Enable zlib")
     set(LLVM_ENABLE_ZSTD OFF CACHE BOOL "Enable zstd")
+
+    # MSVC-specific fixes for C++17 compatibility
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17" CACHE STRING "CXX flags")
+    set(LLVM_ENABLE_WARNINGS OFF CACHE BOOL "Disable warnings that cause build failures")
+    
+    # Try to disable StableHLO components that cause issues
+    set(STABLEHLO_BUILD_TESTCASE_BUILDER OFF CACHE BOOL "Disable StableHLO testcase builder")
+    set(STABLEHLO_ENABLE_BINDINGS_PYTHON OFF CACHE BOOL "Disable StableHLO Python bindings")
 endif()
-
-# These pooling options only work with Ninja, skip them for Visual Studio
-if(CMAKE_GENERATOR_IDENTIFIER MATCHES "NINJA")
-    set(LLVM_PARALLEL_COMPILE_JOBS 1 CACHE STRING "Parallel compile jobs")
-    set(LLVM_PARALLEL_LINK_JOBS 1 CACHE STRING "Parallel link jobs")
-endif()
-
-# Set Python for torch-mlir - use the same variables LLVM expects
-#set(Python3_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python3 executable" FORCE)
-#set(Python_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
-
-# Also set the include dirs and libraries from our Python search
-#if(Python3_INCLUDE_DIRS)
-#    set(Python3_INCLUDE_DIRS ${Python3_INCLUDE_DIRS} CACHE PATH "Python3 include dirs" FORCE)
-#endif()
-#if(Python3_LIBRARIES)
-#    set(Python3_LIBRARIES ${Python3_LIBRARIES} CACHE FILEPATH "Python3 libraries" FORCE)
-#endif()
 
 # Set up torch-mlir as LLVM external project BEFORE calling llvm-project
 set(LLVM_EXTERNAL_PROJECTS "torch-mlir" CACHE STRING "External projects")
